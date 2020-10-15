@@ -1,0 +1,223 @@
+---
+title: "TP_SVM"
+author: "SHAO Nuoya, BONNET Clément"
+date: "2020/10/7"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(pracma)
+library(kernlab)
+library(ggplot2)
+library(pheatmap)
+```
+# Exercice I. Introduction aux C-SVM
+
+## Question 1
+
+La formulation duale du problème d'optimisation associé aux SVM s'écrit
+$$
+\begin{split}
+max_{\mu \in {\rm I\!R}^n} & \Big\{ \mu^T1 - \frac{1}{2}\mu^T diag(y)Kdiag(y) \mu \Big\} \\
+s.t. & \begin{cases}
+    \mu \in [0;C]^n\\
+    \mu^Ty = 0
+\end{cases}
+\end{split}
+$$
+
+## Question 2
+
+D'après l'aide, on constate qu'il y a 12 arguments à la fonction $\texttt{ipop}$. 
+
+$\textbf{c}$ : Vecteur apparaissant dans la fonction quadratique. Ici, $c = -1$.
+
+$\textbf{H}$ : Matrice carrée apparaissant dans la fonction quadratique. Ici $H = diag(y)Kdiag(y)$.
+
+$\textbf{A}$ : Matrice définissant les contraintes sous lesquelles nous minimisons la fonction quadratique. Ici, $A = y^T$.
+
+$\textbf{b}$ : Vecteur définissant les contraintes. Ici, $b = 0$.
+
+$\textbf{l}$ : Vecteur de la borne inférieure. Ici, $l = 0$.
+
+$\textbf{u}$ : Vecteur de la borne supérieure. Ici, $u = C$.
+
+$\textbf{r}$ : Vecteur définissant des contraintes. Ici, $r = 0$.
+
+
+## Question 3 
+```{r}
+C = 100
+X = matrix(c(1,2,4,5,6),5,1)
+y = c(1, 1, -1, -1, 1)
+poly = polydot(degree = 2, scale = 1, offset = 1)
+K = kernelMatrix(poly, X)
+m = nrow(X)
+
+c = rep(-1, m)
+H = diag(y) %*% K %*% diag(y)
+A = t(y)
+b = 0
+l = rep(0, m)
+u = rep(C, m)
+r = 0
+sv = ipop(c, H, A, b, l, u, r)
+alpha = primal(sv)
+alpha
+```
+On obtient bien : 
+$$\alpha_{1} = `r round(alpha[1],digits=3)`,\ \alpha_{2} = `r round(alpha[2],digits=3)`,\ \alpha_{3} = `r round(alpha[3],digits=3)`,\ \alpha_{4} = `r round(alpha[4],digits=3)`,\ \alpha_{5} = `r round(alpha[5],digits=3)`$$
+
+## Question 4
+D'après le théorème de représentation, on sait que f peut s'écrire sous la forme
+$$f = \sum_{i=1}^{n}\alpha_iy_i\kappa(x_i,.) +b$$
+où $\kappa$ est la fonction au noyau ici on a choisi le noyau polynomial d’ordre 2 défini comme suit :
+$$\kappa(x_1, x_2) = (x_1^Tx_2+1)^2$$
+Ainsi,
+$$
+\begin{aligned}
+f(x)
+&= \alpha_1\kappa(1, x) + \alpha_2\kappa(2, x) - \alpha_3\kappa(4, x) - \alpha_4\kappa(5, x) + \alpha_5\kappa(6, x) + b \\
+&= \alpha_1(x+1)^2 + \alpha_2(2x+1)^2 - \alpha_3(4x+1)^2 - \alpha_4(5x+1)^2 + \alpha_5(6x+1)^2 + b \\
+&= \omega_2x^2 + \omega_1x + \omega_0
+\end{aligned}
+$$ 
+En utilisant le fait que 2 est un vecteur de support, $f(2) = 1$ et donc on trouve les valeurs de $\omega_i$ suivantes :
+$$
+\begin{align*}
+\omega_2 &= \alpha_1 + 4\alpha_2 - 16\alpha_3 - 25\alpha_4 + 36\alpha_5 \\
+\omega_1 &= 2\alpha_1 + 4\alpha_2 - 8\alpha_3 - 10\alpha_4 + 12\alpha_5 \\
+\omega_0 &= -8\alpha_1 - 24\alpha_2 + 80\alpha_3 + 120\alpha_4 - 168\alpha_5 + 1 \\
+\end{align*}
+$$
+
+```{r echo=FALSE}
+omegas = c(
+  -8*alpha[1] - 24*alpha[2] + 80*alpha[3] + 120*alpha[4] - 168*alpha[5] + 1,
+  2*alpha[1] + 4*alpha[2] - 8*alpha[3] - 10*alpha[4] + 12*alpha[5],
+  alpha[1] + 4*alpha[2] - 16*alpha[3] - 25*alpha[4] + 36*alpha[5]
+  )
+```
+
+On a finalement
+$$\omega_2 = `r round(omegas[3], digits=3)`,\ \omega_1 = `r round(omegas[2], digits=3)`,\ \omega_0 = `r round(omegas[1], digits=3)`$$ 
+
+## Question 5
+```{r}
+x = c(1, 2, 4, 5, 6)
+y = c(1, 1, 2, 2, 1)
+w2 = omegas[3]
+w1 = omegas[2]
+w0 = omegas[1]
+xf = seq(0,8,l=100)
+f = function(xf){w2*xf^2 + w1*xf + w0}
+plot(x, rep(0, 5), pch = c(21, 22)[y], bg = c("red", "green3")[y],
+  cex = 1.5, ylim = c(-1.7, 1), xlim = c(0, 8), ylab = "",
+  xlab = "x", las = 2)
+grid()
+lines(xf, f(xf), type='l', col="blue")
+legend('topright', legend = c('frontière'), col = c('blue'), lty=1:2)
+text(matrix(c(1.5, 4.3, 7, 0.5, 0.5, 0.5), 3, 2),
+c("class 1", "class -1", "class 1"),
+col = c("red", "green3", "red"))
+abline(h=0) ; abline(v=c(3, 5.5))
+
+```
+
+On voit que la fonction f sépare correctement les points de classes différentes.
+
+# Exercice II : Support Vector Machines et validation croisée 
+
+## Question 1
+
+```{r, echo=FALSE}
+data = read.table('banana_train.txt')
+plot(data[,'X1'], data[, 'X2'], col=(data[, 'Y']+3), pch = 16, ylab = "X2",
+  xlab = "X1")
+```
+
+## Question 2
+```{r}
+poly1 = rbfdot(sigma = 5)
+x1 = as.matrix(cbind(data[,'X1'],data['X2']))
+y1 = as.vector(data[,'Y'])
+K1 = kernelMatrix(poly1, x1)
+C1 = 5
+
+c1 = rep(-1, nrow(x1))
+H1 = diag(y1) %*% K1 %*% diag(y1)
+A1 = t(y1)
+b1 = 0
+r1 = 0
+u1 = rep(C1, length(y1))
+l1 = rep(0, length(y1))
+sv1 = ipop(c1, H1, A1, b1, l1, u1, r1)
+fit.svm1 = ksvm(Y~., data, type = 'C-svc', kernal = 'rbfdot', kpar = list(sigma = 5), C = 5)
+```
+
+
+## Question 3
+```{r}
+plot(fit.svm1, data = data)
+```
+
+En changeant les valeurs de $C$ et $\sigma$, on constate que : 
+Plus $C$ est grand, moins il y aura de vecteurs de support.
+Plus $sigma$ est grand, plus la frontière est complexe et moins linéaire. L'overfit augmente avec sigma.
+
+## Question 4
+```{r, echo=FALSE}
+C = logseq(0.05,20,40)
+S = logseq(0.1,20,40)
+errs = matrix(0, length(C), length(S))
+for(i in 1:length(C)){
+ for(j in 1:length(S)){
+   fit.svm = ksvm(Y~., data=data, type='C-svc', kernal='rbfdot', kpar=list(sigma=S[j]), C=C[i], cross=5)
+   errs[i,j] = fit.svm@cross
+ }
+}
+```
+
+```{r, echo=FALSE}
+colnames(errs) = round(S, 2)
+rownames(errs) = round(C, 2)
+pheatmap(errs, cluster_rows = FALSE, cluster_cols = FALSE)
+```
+```{r, echo=FALSE}
+best_couple <- function(errs, C, S){
+  for(i in 1:length(C)){
+    for(j in 1:length(S)){
+      if(abs(errs[i,j] - min(errs)) < 10^-7){
+        return(c(C[i], S[j]))
+      }
+    }
+  }
+}
+couple = best_couple(errs, C, S)
+Cstar = couple[1]
+Sstar = couple[2]
+
+```
+
+Le couple optimal $(C^*, \sigma^*)$ est
+$$C^* = `r round(Cstar, digits=3)`,\ \sigma^* = `r round(Sstar, digits=3)`$$
+
+## Question 5
+
+```{r, echo=FALSE}
+Tdata = read.table('banana_test.txt')
+plot(Tdata[,'X1'], Tdata[, 'X2'], col=(Tdata[, 'Y']+3))
+```
+
+```{r}
+fit.svm3 = ksvm(Y~., data=data, type = 'C-svc', kernal = 'rbfdot', kpar = list(sigma = Sstar), C = Cstar)
+error_optim = fit.svm3@error
+plot(fit.svm3)
+error_optim
+```
+
+
+Le taux d'erreur obtenu sur l’échantillon de test est `r round(error_optim, digits=4)`.
+
