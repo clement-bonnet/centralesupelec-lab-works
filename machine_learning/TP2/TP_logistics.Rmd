@@ -1,0 +1,176 @@
+---
+title: "TP_Logistics"
+author: "SHAO Nuoya, BONNET Clément"
+date: "2020/10/17"
+output: html_document
+---
+## Question 4
+On a $\mathbf{H_1} = \mathbf{-X^TVX}$ avec $\mathbf{V}$ la matrice diagonale formée des $\pi_i(1-\pi_i)$. Comme $\pi_i(1-\pi_i)$ est majoré par $\frac{1}{4}$, on construit $\mathbf{H_2} = -\frac{1}{4}\mathbf{X^TIX}$ avec $\mathbf{I}$ la matrice d'identité. Alors on a : $\forall \mathbf{X}\in\mathbf{R^{n*p}}$ avec $\mathbf{X = (x_1^T,...,x_n^T)^T}$
+$$
+\begin{align}
+\mathbf{X^T(H_1-H_2)X} &= -\mathbf{\sum_i}(\pi_i(1-\pi_i)-\frac{1}{4})\mathbf{x_ix_i^T} \\
+&=\mathbf{\sum_i}(\frac{1}{4}-\pi_i(1-\pi_i))\mathbf{x_ix_i^T} 
+\end{align}
+$$
+D'où $\mathbf{H_1-H_2}$ est défini-positive car $\pi_i(1-\pi_i) \leq \frac{1}{4}$ et $\mathbf{x_ix_i^T}$ est défini-positive pour $\forall i \in [1,...,n]$
+
+## Question 5
+On remplace $\mathbf{H_1}$ par $\mathbf{H_2}$ dans l'équation (6) et on a 
+$$
+\begin{align}
+\beta^{(s+1)} &= \beta^{(s)}+4(\mathbf{X^TIX})^{-1}\mathbf{X^T}(\mathbf{y-\pi}) \\
+&= \beta^{(s)}+4\mathbf{X}^{-1}(\mathbf{y-\pi})
+\end{align}
+$$
+
+## Question 6
+L'intérêt de rajouter le terme pénalisé est pour limiter l'overfit. Quand il y a trop de paramètres, la valeur de $L_{\lambda}$ va être très grande, il faut donc la pénaliser.
+Maximiser $L_\lambda$ par rapport à $\beta$ revient à maximser $L$ et à minimiser en même temps $\vert\vert \beta_\lambda \vert\vert_2^2$. Il s'agit de réaliser un compromis entre ces 2 termes pour diminuer l'overfit sans trop pénaliser la vraissemblance qui aurait pour effet un underfit du training set. Le paramètre $\lambda$ est responsable du compromis.
+
+## Question 7
+$$
+\begin{align}
+max_{\beta}\lbrace L_{\lambda}(\beta)\rbrace&=min_{\beta}\lbrace -L_{\lambda}(\beta)\rbrace \\
+& = min_{\beta}\lbrace -L_(\beta)+\frac{\lambda}{2}||\beta||_2^2\rbrace
+\end{align}
+$$
+On a 
+$$
+\begin{align}
+-L(\beta) &= -\sum_{i=1}^n \frac{1+y_i}{2}ln[\pi(\mathbf{x_i})] + \frac{1-y_i}{2}ln[1-\pi(\mathbf{x_i})] \\
+&= -\frac{1}{2}\sum_{i=1}^n ln[\pi(\mathbf{x_i})(1-\pi(\mathbf{x_i}))] + y_i[ln(\frac{\pi(\mathbf{x_i)}}{1-\pi(\mathbf{x_i})})] \\
+&= -\frac{1}{2}\sum_{i=1}^n ln[\pi(\mathbf{x_i})(1-\pi(\mathbf{x_i}))(\frac{\pi(\mathbf{x_i})}{1-\pi(\mathbf{x_i})})^{y_i}] \\
+&= -\frac{1}{2}\sum_{i=1}^n ln[\frac{exp(\mathbf{x_i^T}\beta)}{[1+exp(\mathbf{x_i^T}\beta)]^2}exp(y_i\mathbf{x_i^T}\beta)] \\
+&= \frac{1}{2}\sum_{i=1}^n ln[(exp(\mathbf{x_i^T}\beta)+2+exp(-\mathbf{x_i^T}\beta))exp(-y_i\mathbf{x_i^T}\beta)] \tag{*}
+\end{align}
+$$
+avec
+$$
+(*)=
+\left\{
+  \begin{align}
+           \frac{1}{2}\sum_{i=1}^n ln^2[1+exp(-\mathbf{x_i^T}\beta)],\ si\ y_i=1 \\
+           \frac{1}{2}\sum_{i=1}^n ln^2[1+exp(\mathbf{x_i^T}\beta)],\ si\ y_i=-1
+  \end{align} 
+\right.
+$$
+$$
+(*)=
+\left\{
+  \begin{align}
+           &\sum_{i=1}^n ln[1+exp(-y_i\mathbf{x_i^T}\beta)],\ si\ y_i=1 \\
+           &\sum_{i=1}^n ln[1+exp(-y_i\mathbf{x_i^T}\beta)],\ si\ y_i=-1
+  \end{align} 
+\right.
+$$
+On en déduit que $$-L(\beta) = \sum_{i=1}^n ln[1+exp(-y_i\beta\mathbf{x_i})]$$
+Par conséquent, 
+$$
+max_{\beta}\lbrace L_{\lambda}(\beta)\rbrace = min_{\beta}\lbrace\sum_{i=1}^n ln[1+exp(-y_i\mathbf{x_i^T}\beta)]+\frac{\lambda}{2}||\beta||_2^2 \rbrace
+$$
+
+## Question 8
+D'après la définition de $L_{\lambda}(\beta)$, on a $L_{\lambda}(\beta)=L(\beta)-\frac{\lambda}{2}||\beta_{\lambda}||_2^2$.
+Alors 
+$$
+\left\{
+  \begin{align}
+  \mathbf{U}(\beta_\lambda) &= \mathbf{U}(\beta) - \lambda\beta_{\lambda} \\
+  \mathbf{H}(\beta_\lambda) &= \mathbf{H}(\beta) - \lambda
+  \end{align}
+\right.
+$$
+D'où 
+$$
+\left\{
+  \begin{align}
+  \mathbf{U}(\beta_\lambda) &= \mathbf{X^T}(y-\pi) - \lambda\beta_{\lambda} \\
+  \mathbf{H}(\beta_\lambda) &= \mathbf{-X^TVX} - \lambda \mathbf{I}_p
+  \end{align}
+\right.
+$$
+Par ailleurs, 
+$$
+\begin{align}
+\beta^{(s+1)} &= \beta^{(s)}-[\mathbf{H}(\beta^{(s)})]^{-1}\mathbf{U}(\beta^{(s)}) \\
+\beta_{\lambda}^{(s+1)}&= \beta_{\lambda}^{(s)} + (\mathbf{X^TVX+\lambda I}_p)^{-1}(\mathbf{X^T}(y-\pi) - \lambda\beta_{\lambda}^{(s)})
+\end{align}
+$$
+En remplaçant $\pi_i(1-\pi_i)$ par $\frac{1}{4}$, on a $\mathbf{V} = \mathbf{\frac{I_p}{4}}$ donc on déduit que :
+$$
+\begin{align}
+\beta_{\lambda}^{(s+1)} &= \beta_{\lambda}^{(s)} + (\mathbf{X^T \frac{I_p}{4} X+\lambda I}_p)^{-1}(\mathbf{X^T}(y-\pi) - \lambda\beta_{\lambda}^{(s)}) \\
+& = \beta_{\lambda}^{(s)} + 4(\mathbf{X^TX+4\lambda I}_p)^{-1}(\mathbf{X^T}(y-\pi) - \lambda\beta_{\lambda}^{(s)})
+\end{align}
+$$
+
+## Question 9
+
+# 3 Cas pratique
+## Question 10
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(glmnet)
+library(pheatmap)
+```
+
+```{r}
+data = read.table('Alzheimer_Webster.txt',header = T)
+```
+
+```{r}
+X = as.matrix(data[,1:(ncol(data)-1)])
+y = as.matrix(data[,ncol(data)])
+```
+
+```{r}
+model = cv.glmnet(X, y, alpha=0)
+```
+
+```{r}
+plot(model$lambda, model$cvm, pch=21)
+```
+
+```{r}
+model1 = cv.glmnet(X, y, alpha=0, lambda = seq(0.01, 10, by=0.1))
+plot(model1$lambda, model1$cvm, pch=21)
+```
+
+## Question 11
+```{r}
+A = seq(0, 1, by=0.1)
+L = seq(0, 10, by=0.2)
+errors = matrix(0, length(A), length(L))
+
+for (i in 1:length(A)){
+  Model = cv.glmnet(X, y, alpha = A[i], lambda = L)
+  for (j in 1:length(L)){
+    errors[i,j] = Model$cvm[j] 
+  }
+}
+```
+
+```{r}
+colnames(errors) = L
+rownames(errors) = A
+pheatmap(errors, display_numbers = F, cluster_rows = F, cluster_cols = F, width = 0.1)
+```
+
+```{r}
+A1 = seq(0, 0.1, by=0.01)
+L1 = seq(0.5, 1.5, by=0.1)
+errors1 = matrix(0, length(A1), length(L1))
+
+for (i in 1:length(A1)){
+  Model1 = cv.glmnet(X, y, alpha = A1[i], lambda = L1)
+  for (j in 1:length(L1)){
+    errors1[i,j] = Model1$cvm[j] 
+  }
+}
+```
+
+```{r}
+colnames(errors1) = L1
+rownames(errors1) = A1
+pheatmap(errors1, display_numbers = T, cluster_rows = F, cluster_cols = F, number_format = '%.5f')
+```
+On en déduit que $\lambda^* = 1.1,\ \alpha^* = 0$
