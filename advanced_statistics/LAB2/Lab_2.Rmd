@@ -1,0 +1,492 @@
+---
+title: "Lab 2"
+author: "Clément Bonnet, Pierre Houdoin"
+date: "30/10/2020"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+urlcolor: blue
+---
+
+------
+
+## Exercise 1
+### Code your own EM algorithm
+
+```{r}
+EM <- function(X, K, nb_iter) {
+  n <- length(X)
+  # Initialization
+  prop <- runif(K)
+  prop <- prop/sum(prop) # normalize probabilities of clusters
+  means <- runif(K, min=-1, max=1)
+  sigmas <- runif(K)
+  P <- matrix(nrow=n, ncol=K)
+  for (t in 1:nb_iter){
+    # Expectation step
+    for (i in 1:n){
+      for (k in 1:K){
+        P[i,k] <- prop[k]/(sigmas[k]*sqrt(2*pi))*exp(-1/2 * ((X[i]-means[k])/sigmas[k])**2)
+      }
+    }
+    P <- P/rowSums(P)
+    # Maximization step
+    prop <- colSums(P)/n
+    means <- t(P) %*% X / (n*prop)
+    for (k in 1:K){
+      sigmas[k] <- sqrt(1/(n*prop[k]) * P[,k]%*%(X - means[k])**2)
+    }
+  }
+  result <- list(means=unlist(means), sigmas=sigmas, prop=prop)
+  return(result)
+}
+```
+
+#### Test of the EM algorithm with the a Gaussian Mixture Model made of two clusters.
+```{r}
+# 2 clusters with probability 0.3 and 0.7, means 0 and 4, sigmas 1 and 0.75
+distr <- sample(c(0, 1), 1000, c(0.3, 0.7), replace = TRUE)
+mixture <- distr*rnorm(1000)+(1-distr)*rnorm(1000, 4, 0.75)
+result <- EM(mixture, 2, 100)
+result
+```
+The algorithm is able to correctly estimate the latent variables in addition to the parameters of the gaussian mixture.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(ggplot2)
+cluster <- factor(dnorm(mixture, mean=result$means[1], sd=result$sigmas[1]) > dnorm(mixture, mean=result$means[2], sd=result$sigmas[2]), labels=c("1", "2"))
+ggplot() +
+  geom_line(aes(x=mixture), color="black", size=1.2, stat="density")+
+  geom_point(aes(x = mixture, color=cluster, ), y = 0, size = 0.6)
+```
+
+------
+
+
+## Exercise 2
+### Use your own EM algorithm to segment a grayscale picture
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(imager)
+image <- load.image("lex-aliviado-Ta0YDpINGZk-unsplash_small.jpg")
+image <- resize_halfXY(resize_halfXY(image))
+plot(image)
+```
+
+Use of the EM algorithm with 2 clusters in order to segment the picture.
+```{r}
+df <- as.data.frame(image)
+df <- df[df$cc == 1,]  # keep only one channel
+result <- EM(df$value, 2, 100)
+result
+```
+
+### Picture segmentation
+```{r}
+cluster <- dnorm(df$value, mean=result$means[1], sd=result$sigmas[1]) > dnorm(df$value, mean=result$means[2], sd=result$sigmas[2])
+if(sum(cluster) < length(cluster)/2){cluster <- -cluster}  # Swap black and white if needed, in order to keep a majority of white
+segmentation <- as.cimg(cluster, x=dim(image)[1], y=dim(image)[2])
+plot(segmentation)
+```
+
+By using two clusters in the EM algorithm, one can segment the image. One can see that the window, the ground and the accordionist belong to the same cluster.
+
+------
+
+
+## Exercise 3
+### Mutlivariate EM
+
+### I-Presentation of the problem
+#### $\qquad$ A) Gaussian mixture model
+$\\$
+
+We note $L$ the likelihood and $l$ the log-likelihood.
+
+We observed a $n$-sample $x_1,...,x_n \in \mathbb{R^p}$, each observation following a gaussian multivariate distribution. The data are extracted from $K$ different distributions. 
+
+We aim to find $\theta = \left(\pi_1,...,\pi_K,\mu_1,...,\mu_K,\Sigma_1,...,\Sigma_K\right)$ the parameters of our gaussian mixture model so that:
+$$
+\boxed{\bf{\forall x \in \mathbb{R}^p, f(x) = \sum_{j=1}^K \frac{\pi_j}{\sqrt{(2\pi)^p \det (\Sigma_j)}} \exp \left(-\frac{1}{2}(x-\mu_j)^T\Sigma_j^{-1}(x-\mu_j)\right)}}
+$$
+
+#### $\qquad$ B) Expectation-maximization algorithm
+$\\$
+
+We use the iterative EM algorithm to solve this problem. 
+
+First, we randomly initialize $\theta = \theta^\star$, and we compute the matrix $P_{\theta^\star} = \left(P(Z_i=j|X_i=x_i,\theta^\star \right))_{i \in[1,n],j \in[1,K]}$. Each row indicates the probability that the observation $i$ derives from each gaussian model, similarly to soft clustering (Estimation part).
+
+The second step consists in maximizing the likelihood of the $n$-sample. But since, we do not know from which distribution each observation comes from, and only a probability for each one, we maximize the expected value of the likelihood, taken over the unknown data $Z$.
+
+Thus, we look for $\boxed{\bf{\pi_1,...,\pi_K,\mu_1,...,\mu_K,\Sigma_1,...,\Sigma_K}}$ that maximize $\boxed{\bf{\mathbb{E}_{Z|X,\theta^\star}\left(l(X,Z|\theta^\star)\right)}}$. 
+
+### II-Expression of the expected value of the likelihood
+#### $\qquad$ A) Expression of the likelihood
+$\\$
+
+We can write:
+
+$$
+\begin{aligned}
+L(x_1,...,x_n,Z_1,...,z_n|\theta)&=\prod_{i=1}^n L(X_i=x_i,Z_i=z_i|\theta) \\
+&=\prod_{i=1}^n L(Z_i=z_i|\theta) L(X_i=x_i|Z_i=z_i,\theta) \\
+&=\prod_{i=1}^n \prod_{j=1}^K \left(L(Z_i=j|\theta) L(X_i=x_i|Z_i=j,\theta)\right)^{\mathbb{1}_{Z_i=j}} \\
+\end{aligned}
+$$
+
+Finally, we can derive the log-likelihood: 
+
+$$
+\boxed{\bf{l(x_1,...,x_n,Z_1,...,z_n|\theta)=\sum_{i=1}^n \sum_{j=1}^K \mathbb{1}_{Z_i=j} \left(l(Z_i=j|\theta) +l(X_i=x_i|Z_i=j,\theta)\right)}}
+$$
+
+
+#### $\qquad$ B) Computation of the expected value
+$\\$
+
+Now we can compute $\mathbb{E}_{Z|X,\theta^\star}\left(l(X,Z|\theta)\right)$ and maximize it in the case of multivariate gaussian distributions.
+
+$$
+\begin{aligned}
+\mathbb{E}_{Z|X,\theta^\star}\left(l(X,Z|\theta)\right) &=\mathbb{E}_{Z|X,\theta^\star}\left(\sum_{i=1}^n \sum_{j=1}^K \mathbb{1}_{Z_i=j} \left(l(Z_i=j|\theta) +l(X_i=x_i|Z_i=j,\theta)\right)\right) \\
+&=\sum_{i=1}^n \sum_{j=1}^K \mathbb{E}_{Z|X,\theta^\star}\left(\mathbb{1}_{Z_i=j} \right) \left(l(Z_i=j|\theta) +l(X_i=x_i|Z_i=j,\theta)\right)\\
+&=\sum_{i=1}^n \sum_{j=1}^K P(Z_i=j|X,\theta^\star) \left(l(Z_i=j|\theta) +l(X_i=x_i|Z_i=j,\theta)\right)\\
+\end{aligned}
+$$
+Now, we are going to give an explicit expression of each term. We denote $g(x,\mu,\Sigma)$ the probability density function of a gaussian multivariate distribution. We have using the Bayes rule:
+
+$$
+\begin{aligned}
+P(Z_i=j|X,\theta^\star)&=\frac{P(X_i=x_i|Z_i=j,\theta^\star)P(Z_i=j|\theta^\star)}{P(X_i=x_i|\theta^\star)} \\
+&=\frac{\pi_j^\star g(x_i,\mu_j^\star,\Sigma_j^\star)}{\sum_{k=1}^K \pi_k^\star g(x_i,\mu_k^\star,\Sigma_k^\star)} \\
+\end{aligned}
+$$
+We also compute the terms in the log-likelihood: 
+$$
+l(Z_i=j|\theta) +l(X_i=x_i|Z_i=j,\theta)=\ln(\pi_j)+\ln(g(x_i,\mu_j,\Sigma_j))
+$$
+So, we must find $\theta$ to optimize the following quantity:
+
+$$
+\boxed{\bf{\sum_{i=1}^n \sum_{j=1}^K \frac{\pi_j^\star g(x_i,\mu_j^\star,\Sigma_j^\star)}{\sum_{k=1}^K \pi_k^\star g(x_i,\mu_k^\star,\Sigma_k^\star)} \left(\ln(\pi_j)+\ln(g(x_i,\mu_j,\Sigma_j))\right)}}\\
+$$
+
+
+
+### III-Optimization of the expected value
+#### $\qquad$ A) Optimization of $\pi$
+$\\$
+
+Final part: we are going to find the optimal $\theta$ to maximize this quantity. We start by finding the optimal $\pi_j$. This is a constrained optimization problem since we have the constraint: $\sum_{j=1}^K\pi_j=1$. We use the lagrangian multiplier.
+
+We note $T_{i,j}^\star$ the quantity $\frac{\pi_j^\star g(x_i,\mu_j^\star,\Sigma_j^\star)}{\sum_{k=1}^K \pi_k^\star g(x_i,\mu_k^\star,\Sigma_k^\star)}$, so that we look for:
+
+$$
+\begin{aligned}
+&\displaystyle \max_{\pi_1,...,\pi_K} \sum_{i=1}^n \sum_{j=1}^K \frac{\pi_j^\star g(x_i,\mu_j^\star,\Sigma_j^\star)}{\sum_{k=1}^K \pi_k^\star g(x_i,\mu_k^\star,\Sigma_k^\star)} \left(\ln(\pi_j)+\ln(g(x_i,\mu_j,\Sigma_j))\right) \qquad \mathrm{with} \quad \sum_{j=1}^K \pi_j=1 \\
+\iff &\displaystyle \max_{\pi_1,...,\pi_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star \ln(\pi_j) \qquad \mathrm{with} \quad \sum_{j=1}^K \pi_j - 1=0 \\
+\end{aligned}
+$$
+
+We use the Lagrangian multiplier to solve this problem. We define:
+
+$$
+\begin{aligned}
+f &: \begin{pmatrix} \pi_1 \\ . \\ . \\ \pi_K \end{pmatrix} \mapsto \sum_{i=1}^n\sum_{j=1}^K T_{i,j}^\star \ln(\pi_j) \\
+g &: \begin{pmatrix} \pi_1 \\ . \\ . \\ \pi_K \end{pmatrix} \mapsto \sum_{j=1}^K \pi_j -1 \\
+\end{aligned}
+$$
+
+Looking for : $\displaystyle \max_{\pi}f(x) \quad \mathrm{with} \quad g(x) = 0 \quad$ lead us to define $\mathcal{L}(\pi,\lambda)=f(\pi)-\lambda g(\pi)$ and look for the saddle points of $\mathcal{L}$ where the hessian matrix of $f$ is definite negative to ensure it is a maximum. We have:
+
+$$
+\nabla\mathcal{L}(\pi,\lambda)=\begin{pmatrix} \frac{1}{\pi_1}\sum_{i=1}^nT_{i,1}^\star -\lambda\\ . \\ . \\ \frac{1}{\pi_K}\sum_{i=1}^nT_{i,K}^\star -\lambda \\ 1-\sum_{j=1}^k \pi_j \end{pmatrix} \qquad \mathrm{and} \qquad H(f) = \left(-\frac{\delta_{jk}}{\pi_k^2}\sum_{i=1}^n T_{i,j}^\star \right)_{(j,k) \in[1,K]^2}
+$$
+We can notice that the hessian of $f$ is always definite negative since all $T_{i,j}^\star$ are positives. Thus we just need to find $(\pi_1,...,\pi_K,\lambda)$ that cancels the gradient of the Lagrangian. We derive $K+1$ and we find:
+
+$$
+\left\{
+    \begin{array}{ll}
+        \pi_1 &= \frac{\sum_{i=1}^n T_{i,1}^\star}{\lambda}\\
+        . & \\
+        . & \\
+        \pi_K &= \frac{\sum_{i=1}^n T_{i,K}^\star}{\lambda}\\
+        \sum_{j=1}^K \pi_j &= 1
+    \end{array}
+\right.
+\qquad \iff \qquad
+\left\{
+    \begin{array}{ll}
+        \pi_1 &= \frac{\sum_{i=1}^n T_{i,1}^\star}{\lambda}\\
+        . & \\
+        . & \\
+        \pi_K &= \frac{\sum_{i=1}^n T_{i,K}^\star}{\lambda}\\
+        \lambda &= \sum_{i=1}^n\sum_{j=1}^K T_{i,j}^\star = n
+    \end{array}
+\right.
+\qquad \iff \qquad
+\left\{
+    \begin{array}{ll}
+        \pi_1 &= \frac{1}{n}\sum_{i=1}^n T_{i,1}^\star \\
+        . & \\
+        . & \\
+        \pi_K &= \frac{1}{n}\sum_{i=1}^n T_{i,K}^\star
+    \end{array}
+\right.
+$$
+
+The optimal $\pi$ for our problem is:
+$$
+\boxed{\bf{\left\{
+    \begin{array}{ll}
+        \pi_1 &= \frac{1}{n}\sum_{i=1}^n \frac{\pi_1^\star g(x_i,\mu_1^\star,\Sigma_1^\star)}{\sum_{k=1}^K \pi_k^\star g(x_i,\mu_k^\star,\Sigma_k^\star)}\\
+        . & \\
+        . & \\
+        \pi_K &= \frac{1}{n}\sum_{i=1}^n \frac{\pi_K^\star g(x_i,\mu_K^\star,\Sigma_K^\star)}{\sum_{k=1}^K \pi_k^\star g(x_i,\mu_k^\star,\Sigma_k^\star)}
+    \end{array}
+\right.}}
+$$
+
+#### $\qquad$ B) Optimization of $\mu$
+$\\$
+
+We look for:
+
+$$
+\begin{aligned}
+&\displaystyle \max_{\mu_1,...,\mu_K} \sum_{i=1}^n \sum_{j=1}^K \frac{\pi_j^\star g(x_i,\mu_j^\star,\Sigma_j^\star)}{\sum_{k=1}^K \pi_k^\star g(x_i,\mu_k^\star,\Sigma_k^\star)} \left(\ln(\pi_j)+\ln(g(x_i,\mu_j,\Sigma_j))\right) \\
+\iff &\displaystyle \max_{\mu_1,...,\mu_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star \ln(g(x_i,\mu_j,\Sigma_j)) \\
+\end{aligned}
+$$
+
+We are going to give an explicit expression of $\ln(g(x_i,\mu_j,\Sigma_j))$.
+
+$$
+\ln(g(x_i,\mu_j,\Sigma_j))=-\frac{1}{2}\left(p\ln(2\pi)+\ln(|\Sigma_j|\right) -\frac{1}{2}(x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)
+$$
+Thus, we look for solving the following problem :
+
+ $$
+\begin{aligned}
+&\displaystyle \max_{\mu_1,...,\mu_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star \left(-\frac{1}{2}\left(p\ln(2\pi)+\ln(|\Sigma_j|\right) -\frac{1}{2}(x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)\right) \\
+\iff &\displaystyle \min_{\mu_1,...,\mu_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star \left(p\ln(2\pi)+\ln(|\Sigma_j|) + (x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)\right) \\
+\iff &\displaystyle \min_{\mu_1,...,\mu_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star \left(\ln(|\Sigma_j|) + (x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)\right) \\
+\iff &\displaystyle \min_{\mu_1,...,\mu_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star(x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j) \\
+\iff &\sum_{j=1}^K \displaystyle \min_{\mu_j \in \mathbb{R}^p} \sum_{i=1}^n T_{i,j}^\star(x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j) \\
+\end{aligned}
+$$
+We need to optimize $K$ independant quantities, such equality being true because each term is positive and there are no correlations between the value of $\mu_j$. We are going to compute the gradient for each problem and cancel each of them out, to find the saddle points. We will then keep those where the hessian is definite positive.
+
+We define : $\forall j \in [1,K], f_j : \mu_j \mapsto \sum_{i=1}^n T_{i,j}^\star (x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)$ and we have :
+
+$$
+\begin{aligned}
+\nabla f_j(\mu_j)&=\sum_{i=1}^n T_{i,j}^\star \left(\frac{\partial(x_i-\mu_j)}{\partial \mu_j}\Sigma_j^{-1}(x_i-\mu_j)+\frac{\partial(x_i-\mu_j)}{\partial \mu_j}(\Sigma_j^{-1})^T(x_i-\mu_j)\right) \\
+&=-\sum_{i=1}^n T_{i,j}^\star \left(\Sigma_j^{-1}+\Sigma_j^{-1}\right)(x_i-\mu_j) \\
+&=-2\Sigma_j^{-1}\sum_{i=1}^n T_{i,j}^\star (x_i-\mu_j) \\
+\end{aligned}
+$$
+
+We can notice that the Hessian will always be positive, so we just need to find a point to cancel the gradient. We have to solve the following equation:
+$$
+\begin{aligned}
+\nabla f_j(\mu_j)&=0 \\
+\iff -2\Sigma_j^{-1}\sum_{i=1}^n T_{i,j}^\star (x_i-\mu_j)&=0 \\
+\iff \qquad \quad \: \sum_{i=1}^n T_{i,j}^\star (x_i-\mu_j)&=0 \qquad \mathrm{because \ the \ kernel \ of \ gaussian \ covariance \ matrix \ is\ } \{0\}\\
+\iff \qquad \qquad \qquad \sum_{i=1}^n T_{i,j}^\star \mu_j&=\sum_{i=1}^n T_{i,j}^\star x_i \\
+\iff \qquad \qquad \qquad \qquad \quad \mu_j&=\sum_{i=1}^n \frac{T_{i,j}^\star}{\sum_{i=1}^n T_{i,j}^\star }x_i \\
+\end{aligned}
+$$
+
+The optimal $\mu$ for our problem is:
+$$
+\boxed{\bf{\left\{
+    \begin{array}{ll}
+        \mu_1 &= \sum_{i=1}^n \frac{T_{i,1}^\star}{\sum_{i=1}^n T_{i,1}^\star }x_i\\
+        . & \\
+        . & \\
+        \mu_K &= \sum_{i=1}^n \frac{T_{i,K}^\star}{\sum_{i=1}^n T_{i,K}^\star }x_i
+    \end{array}
+\right.}}
+$$
+
+#### $\qquad$ C) Optimization of $\Sigma$
+$\\$
+
+We look for:
+
+ $$
+\begin{aligned}
+&\displaystyle \min_{\Sigma_1,...,\Sigma_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star \left(\ln(|\Sigma_j|) + (x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)\right) \\
+\end{aligned}
+$$
+We remember that the $\mu_j$ are the optimum found previously. We should also add the constraint that $\Sigma$ should be a covariance matrix, so symmetric positive-definite, but since the problem becomes very complex, we are going to optimize it as a whole, and hope that the solution is positive-definite. Again, we use the positivity of the terms in the sum to decompose the optimization problem:
+
+$$
+\begin{aligned}
+&\displaystyle \min_{\Sigma_1,...,\Sigma_K} \sum_{i=1}^n \sum_{j=1}^K T_{i,j}^\star \left(\ln(|\Sigma_j|) + (x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)\right) \\
+\iff & \sum_{j=1}^K \displaystyle \min_{\Sigma_j} \sum_{i=1}^n T_{i,j}^\star \left(\ln(|\Sigma_j|) + (x_i-\mu_j)^T\Sigma_j^{-1}(x_i-\mu_j)\right) \\
+\iff & \sum_{j=1}^K \displaystyle \min_{\Sigma_j^{-1}} \sum_{i=1}^n T_{i,j}^\star \left(-\ln(|\Sigma_j|) + (x_i-\mu_j)^T\Sigma_j(x_i-\mu_j)\right) \\
+\end{aligned}
+$$
+
+We define: $\forall j \in [1,K], f_j : \Sigma_j \mapsto \sum_{i=1}^n T_{i,j}^\star \left(-\ln(|\Sigma_j|) + (x_i-\mu_j)^T\Sigma_j(x_i-\mu_j)\right)$ and we have:
+
+$$
+\begin{aligned}
+\frac{\partial f_j}{\partial\Sigma_j}(\Sigma_j)&=\sum_{i=1}^n T_{i,j}^\star \left(-\Sigma_j^{-1}+(x_i-\mu_j)(x_i-\mu_j)^T\right) \\
+&=\sum_{i=1}^n T_{i,j}^\star \left((x_i-\mu_j)(x_i-\mu_j)^T-\Sigma_j^{-1}\right) \qquad \mathrm{and} \\
+\frac{\partial f_j}{\partial\Sigma_j}(\Sigma_j)&=0 \\
+\iff \quad \: 0&=\sum_{i=1}^n T_{i,j}^\star \left((x_i-\mu_j)(x_i-\mu_j)^T-\Sigma_j^{-1}\right) \\
+\iff \Sigma_j^{-1}&=\sum_{i=1}^n \frac{T_{i,j}^\star}{\sum_{i=1}^n T_{i,j}^\star}(x_i-\mu_j)(x_i-\mu_j)^T \\
+\end{aligned}
+$$
+
+We finally check that this matrix is symmetric positive-definite, it is the case, and we take the inverse, since we optimized the minimum over $\Sigma_j^{-1}$. Finally, we get that the optimal $\Sigma$ for our problem is:
+
+$$
+\boxed{\bf{\left\{
+    \begin{array}{ll}
+        \Sigma_1 &= \sum_{i=1}^n \frac{T_{i,1}^\star}{\sum_{i=1}^n T_{i,1}^\star}(x_i-\mu_1)(x_i-\mu_1)^T\\
+        . & \\
+        . & \\
+        \Sigma_K &= \sum_{i=1}^n \frac{T_{i,K}^\star}{\sum_{i=1}^n T_{i,K}^\star}(x_i-\mu_K)(x_i-\mu_K)^T
+    \end{array}
+\right.}}
+$$
+
+
+### IV-Conclusion
+
+The final algorithm to solve our problem can be described as following: 
+
+1) Randomly initialize $\theta^\star = \left(\pi_1^\star,...,\pi_K^\star,\mu_1^\star,...,\mu_K^\star,\Sigma_1^\star,...,\Sigma_K^\star \right)$
+2) Compute the coefficients $T_{i,j}^\star$ with the following relation (Expectation step):
+
+$$
+T_{i,j}^\star=\frac{\pi_j^\star \exp\left(-\frac{1}{2}(x_i-\mu_j^\star)^T\Sigma_j^{-1^\star}(x_i-\mu_j^\star)\right)}{\sum_{k=1}^K\frac{\pi_k^\star}{\sqrt{|\Sigma_k^\star \Sigma_j^{\star -1}|}}\exp\left(-\frac{1}{2}(x_i-\mu_k^\star)^T\Sigma_k^{\star -1}(x_i-\mu_k^\star)\right)}
+$$
+
+3) Compute $\theta=\left(\pi_1,...,\pi_K,\mu_1,...,\mu_K,\Sigma_1,...,\Sigma_K\right)$ with the following relations (Maximization step):
+
+$$
+\left\{
+    \begin{array}{ll}
+        \pi_1 &= \frac{1}{n}\sum_{i=1}^n T_{i,1}^\star\\
+        . & \\
+        . & \\
+        \pi_K &= \frac{1}{n}\sum_{i=1}^n T_{i,K}^\star\\
+    \end{array}
+\right.
+\qquad
+\left\{
+    \begin{array}{ll}
+        \mu_1 &= \sum_{i=1}^n \frac{T_{i,1}^\star}{\sum_{i=1}^n T_{i,1}^\star }x_i\\
+        . & \\
+        . & \\
+        \mu_K &= \sum_{i=1}^n \frac{T_{i,K}^\star}{\sum_{i=1}^n T_{i,K}^\star }x_i\\
+    \end{array}
+\right.
+\qquad
+\left\{
+    \begin{array}{ll}
+        \Sigma_1 &= \sum_{i=1}^n \frac{T_{i,1}^\star}{\sum_{i=1}^n T_{i,1}^\star}(x_i-\mu_1)(x_i-\mu_1)^T\\
+        . & \\
+        . & \\
+        \Sigma_K &= \sum_{i=1}^n \frac{T_{i,K}^\star}{\sum_{i=1}^n T_{i,K}^\star}(x_i-\mu_K)(x_i-\mu_K)^T\\
+    \end{array}
+\right.
+$$
+
+Repeat steps 2 and 3 until convergence.
+
+
+------
+
+
+## Exercise 4
+### This digit does not exist
+
+#### Loading the MNIST dataset
+```{r}
+n_examples <- 5000  # limit to 5000 examples
+if(file.exists("mnist_train.csv")){
+  dataset <- read.csv("mnist_train.csv")
+} else{
+  dataset <- read.csv(url("https://pjreddie.com/media/files/mnist_train.csv"))
+}
+mnist <- dataset[1:n_examples,]
+labels <- mnist[,1]
+train <- mnist[,2:785]
+```
+
+```{r, echo=FALSE}
+digit <- train[1,]
+label <- labels[1]
+```
+
+Example for digit `r label`:
+
+```{r, echo=FALSE}
+plot(as.cimg(255-unlist(digit), x=28, y=28))
+```
+
+We use Principal Component Analysis (PCA) to reduce the dimension of the training set from 784 to 30 features.
+```{r}
+# Principal Component Analysis
+n_comp <- 30  # keep 30 components out of 784
+pca <- prcomp(train)
+train_pca <- pca$x[,1:n_comp]
+reconstruction_mat <- pca$rotation[,1:n_comp]
+train_hat <- train_pca %*% t(reconstruction_mat)  # reconstruct the original dataset
+train_hat <- scale(train_hat, center=-colMeans(train), scale=FALSE)
+```
+
+Reconstruction of digit `r label`:
+
+```{r, echo=FALSE}
+plot(as.cimg(unlist(-train_hat[1,]), x=28, y=28))
+```
+
+We now fit the low-dimensional training set to the multidimensional EM algorithm with $K=10$ clusters.
+
+```{r, warning=FALSE, message=FALSE}
+library(mclust)
+result <- Mclust(train_pca, G=10)
+```
+
+Having fitted 10 clusters to the training set, one can now generate fake digits using the Gaussian Mixture Model parameters.
+
+```{r, warning=FALSE, message=FALSE}
+library(MASS)
+N <- 1000    # number of fake digits to generate
+clusters <- sample(1:10, size=N, prob=result$parameters$pro, replace=TRUE)  # sample clusters
+gen_samples <- array(dim=c(N,30))
+for (i in 1:N){
+  gen_samples[i,] <- mvrnorm(n=1,mu=result$parameters$mean[,clusters[i]],Sigma=result$parameters$variance$sigma[,,clusters[i]])
+}
+gen_hat <- gen_samples %*% t(reconstruction_mat)  # goes back to the original dimension
+gen_hat <- scale(gen_hat, center=-colMeans(train), scale=FALSE)
+```
+
+Example of a random generated digit
+
+```{r}
+i <- sample(1:N, 1)
+plot(as.cimg(unlist(-gen_hat[i,]), x=28, y=28))
+```
+
+A quick [website](https://clementbonnet.com/thisdigitdoesnotexist/) has been created to display generated digits. The URL is the following: https://clementbonnet.com/thisdigitdoesnotexist/.
+
+```{r, eval=FALSE, echo=FALSE}
+for(i in 1:N){
+  imager::save.image(as.cimg(unlist(-gen_hat[i,]), x=28, y=28), paste("digits/digit_",i,".jpg", sep=""), quality=1)
+}
+```
+
+<br>
+
+------
