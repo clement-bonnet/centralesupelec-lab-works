@@ -1,0 +1,423 @@
+\documentclass[a4paper]{article}
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{amsmath,amsfonts,amssymb,amsthm}
+\usepackage[a4paper, bottom=1.3in, top=1.3in, right=1in, left=1in]{geometry}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage[lined,boxed]{algorithm2e}
+\usepackage{natbib}
+\usepackage{dsfont}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\definecolor{amaranth}{rgb}{0.9, 0.17, 0.31}
+\newcommand{\rcol}[1]{{\color{amaranth}#1}}
+
+\usepackage{todonotes}
+\newcommand{\todomp}[1]{\todo[color=Green!10, inline]{\small MP: #1}}
+\newcommand{\todompout}[1]{\todo[color=Green!10]{\scriptsize MP: #1}}
+
+\newcommand{\wh}[1]{\widehat{#1}}
+\newcommand{\wt}[1]{\widetilde{#1}}
+\newcommand{\transp}{\intercal}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Insert your name here
+\newcommand{\fullname}{Clément Bonnet}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\DeclareUnicodeCharacter{2212}{-}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\lecture}[3]{
+   \pagestyle{myheadings}
+   \thispagestyle{plain}
+   \newpage
+   \setcounter{page}{1}
+   \noindent
+   \begin{center}
+   \framebox{
+      \vbox{\vspace{2mm}
+              \hbox to .97\textwidth { {\bf MVA: Reinforcement Learning (2020/2021) \hfill Homework 3} }
+       \vspace{6mm}
+       \hbox to .97\textwidth { {\Large \hfill #1 \hfill } }
+       \vspace{6mm}
+       \hbox to .97\textwidth { {Lecturers: \it A. Lazaric, M. Pirotta  \hfill {{\footnotesize(\today)}}} }
+      \vspace{2mm}}
+   }
+   \end{center}
+   Solution by {\color{amaranth}\fullname}
+   \markboth{#1}{#1}
+   \vspace*{4mm}
+}
+
+
+\DeclareMathOperator*{\argmax}{\arg\,\max}
+\DeclareMathOperator*{\argmin}{\arg\,\min}
+\DeclareMathOperator*{\arginf}{\arg\,\inf}
+
+
+\setlength{\parindent}{0cm}
+\begin{document}
+\lecture{Exploration in Reinforcement Learning (theory)}{3}
+
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Full name: {\color{amaranth}\fullname}}
+\lhead{Exploration in Reinforcement Learning}
+\cfoot{\thepage}
+
+
+\section{UCB}
+
+We find ourselves in the setting of multi-arm bandits.
+\begin{align*}
+	S_{j,t} &= \sum_{k=1}^t X_{i_k,k} \cdot \mathds{1}(i_k = j)\\
+	N_{j,t} &= \sum_{k=1}^t \mathds{1}(i_k = j)\\
+	\wh\mu_{j,t} &= \frac{S_{j,t}}{N_{j,t}}\\
+\end{align*}
+The question is to prove whether or not $\wh\mu_{j,t}$ is an unbiased estimator of $\mu_j$.
+
+At first sight, one could interpret $\wh\mu_{j,t}$ as the simple mean estimate of $\mu_j$ and thus would be unbiased. However, this would only apply if samples $X_{i_k,k}$ were independent and identically distributed (iid), which is not the case here in the online on-policy learning of UCB. Whether an arm is pulled or not depends on previous samples and therefore one can expect the estimate to rather have some bias.
+
+To prove the biasedness of $\wh\mu_{j,t}$, or rather to show that it is not unbiased in the general case, we will consider a simple case and compute its analytical bias. Let us consider the setting of Bernoulli bandits as in section \ref{sec:bernoulli} with $k=2$ binary arms of parameters $\mu_1$ and $\mu_2$. One pulls the arm $i_t$ such that
+\[
+i_t \in \argmax_{j} \wh\mu_{j,t} + U(N_{j,t}, \delta)
+\]
+We assume here that arms are pulled \textbf{randomly} in case of a tie. The UCB exploration term is infinite for $t \in \{1,2\}$ where both arms are pulled successively. At $t=3$, both arms have been pulled once and one of them is going to be pulled again. We look at the sample mean estimates $\wh\mu_{1,3}$ and $\wh\mu_{2,3}$ after the third action.
+\begin{align*}
+	\mathbb{P}\left(\wh\mu_{1,3} = \frac{1}{2}\right) &= (1-\mu_1)(1-\mu_2)\frac{\mu_1}{2} + \mu_1(1-\mu_1)(1-\mu_2) + \mu_1\mu_2\frac{1-\mu_1}{2} \\
+	&= \mu_1\left(\frac{3}{2} - \frac{3}{2}\mu_1 - \mu_2 + \mu_1\mu_2\right) \\
+	\mathbb{P}\left(\wh\mu_{1,3} = 1\right) &= \mu_1^2(1-\mu2) + \mu_1\mu_2(1-\frac{1+\mu_1}{2}) \\
+	&= \mu_1\left(\mu_1 + \frac{1}{2}\mu_2 - \frac{1}{2}\mu_1\mu_2\right) \\
+\end{align*}
+This leads to the calculation of the expected value of $\wh\mu_{1,3}$,
+\begin{align*}
+	\mathbb{E}_{UCB}\left[\wh\mu_{1,3}\right] &= \frac{1}{2}\mathbb{P}\left(\wh\mu_{1,3} = \frac{1}{2}\right) + \mathbb{P}\left(\wh\mu_{1,3} = 1\right) \\
+	&= \mu_1\left(1 - \frac{1}{4}\left(1-\mu_1\right)\right)
+\end{align*}
+The bias of arm $1$ is therefore:
+\[
+	\boxed{\text{bias}_1 \equiv \mathbb{E}_{UCB}\left[\wh\mu_{1,3}\right] - \mu_1 = -\frac{1}{4}\mu_1(1-\mu_1)}
+\]
+Since the arms play a symmetrical role in the derivation of the bias, one can derive the bias for arm $2$:
+\[
+\boxed{\text{bias}_2 \equiv \mathbb{E}_{UCB}\left[\wh\mu_{2,3}\right] - \mu_2 = -\frac{1}{4}\mu_2(1-\mu_2)}
+\]
+These biases are strictly negative if $\; 0 < \mu_1,\mu_2 < 1 $. Therefore, $\boxed{\wh\mu_{j,t} \text{ is not an unbiased estimator of } \mu_j \text{ in general}}$.
+
+
+
+\section{Best Arm Identification}
+
+\begin{itemize}
+	\item Let us compute a function $U(t,\delta)$ that satisfies the any-time confidence bound. For any arm $i \in [k]$
+	\[
+		\mathbb{P}\left(\bigcup_{t=1}^{\infty} \left\{ | \wh{\mu}_{i,t} - \mu_i | > U(t,\delta)\right\} \right) \leq \delta
+	\]
+	If one chooses $\boxed{U(t,\delta) = \sqrt{\frac{1}{2t} \log \frac{\pi^2 t^2}{3\delta} }}$,
+	\begin{align*}
+		\mathbb{P}\left(\bigcup_{t=1}^{\infty} \left\{ | \wh{\mu}_{i,t} - \mu_i | > U(t,\delta)\right\} \right)
+		& \leq \sum_{t=1}^\infty \mathbb{P}\left( \left\{ | \wh{\mu}_{i,t} - \mu_i | > U(t,\delta)\right\} \right) \\
+		& \leq \sum_{t=1}^\infty 2\exp(-2tU(t, \delta)^2) \quad \text{(Hoeffding's inequality)} \\
+		& = \sum_{t=1}^\infty 2\exp\left(-\log \frac{\pi^2 t^2}{3\delta}\right) \\
+		& = \sum_{t=1}^\infty \frac{6\delta}{\pi^2}\frac{1}{t^2} \\
+		& = \delta
+	\end{align*}
+	
+	\item Let $\mathcal{E} = \bigcup_{i=1}^{k}\bigcup_{t=1}^{\infty} \left\{ | \wh{\mu}_{i,t} - \mu_i | > U(t,\delta')\right\}$. For $\boxed{\delta' = \frac{\delta}{k}}$,
+	\begin{align*}
+		\mathbb{P}\left(\mathcal{E} \right)
+		& = \sum_{i=1}^k \mathbb{P}\left(\bigcup_{t=1}^{\infty} \left\{ | \wh{\mu}_{i,t} - \mu_i | > U(t,\delta')\right\} \right) \\
+		& \leq \sum_{i=1}^k \delta' \\
+		& = \sum_{i=1}^k \frac{\delta}{k} \\
+		& = \delta
+	\end{align*}
+	Therefore, $\mathbb{P}\left(\mathcal{E} \right) \leq \delta$. This is a bad event since the confidence intervals do not hold.
+	
+	\item Let us show that with probability at least $1-\delta$, the optimal arm $i^\star =\argmax_i \{\mu_{i}\}$ remains in the active set $S$.
+	
+	Let us assume $\neg \mathcal{E}$. Under such conditions,
+	\[
+		\forall t, \forall i, | \wh{\mu}_{i,t} - \mu_i | \leq U(t,\delta')
+	\]
+	Therefore, 
+	\begin{equation*}
+		\forall t, \forall i \neq i^\star,
+		\begin{cases}
+			& \wh{\mu}_{i^\star,t} \geq \mu^\star - U(t,\delta')\\
+			& \wh{\mu}_{i,t} \leq \mu_i + U(t,\delta')\\
+		\end{cases}
+	\end{equation*}
+	\begin{equation}
+		\label{equ:neg_e}
+		\forall t, \forall i \neq i^\star,\quad
+		\wh{\mu}_{i^\star,t} - \wh{\mu}_{i,t} \geq \Delta_i - 2U(t,\delta')
+	\end{equation}
+	Let us now show that this implies that in such conditions, arm $i^\star$ remains in the active set $S$. Under such conditions, let us assume the opposite and prove by contradiction. Assume the arm $i^\star$ is eliminated at time $t_0$. Using $\delta'$ instead of $\delta$ in the algorithm, this means:
+	\begin{equation}
+		\label{equ:contradiction}
+		\exists i_0 \neq i^\star, \wh{\mu}_{i^\star,t_0} \leq \wh{\mu}_{i_0,t_0} - 2U(t_0,\delta')
+	\end{equation}
+	Using equation (\ref{equ:neg_e}) for $t=t_0$ and $i=i_0$ combined with equation (\ref{equ:contradiction}), one finds the following inequality:
+	\begin{equation*}
+		 \Delta_{i_0} - 2U(t_0,\delta') \leq \wh{\mu}_{i^\star,t_0} - \wh{\mu}_{i_0,t_0} \leq -2U(t_0,\delta')
+	\end{equation*}
+	This implies $\Delta_{i_0} \leq 0$ which is a contradiction since $\Delta_{i_0} = \mu^\star - \mu_{i_0} > 0$ (we assume for simplicity there is only one best arm). Therefore, by contradiction, we prove that under $\neg \mathcal{E}$ conditions, the arm $i^\star$ remains in the active set $S$.
+	\[
+		\neg \mathcal{E} \subset \left\{ \text{arm $i^\star$ remains in the active set} \right\}
+	\]
+	\[
+		\mathbb{P}\left(\neg \mathcal{E} \right) \leq \mathbb{P}\left( \left\{ \text{arm $i^\star$ remains in the active set} \right\} \right)
+	\]
+	\[
+		\boxed{\mathbb{P}\left( \left\{ \text{arm $i^\star$ remains in the active set} \right\} \right) \geq 1 - \mathbb{P}\left( \mathcal{E} \right) \geq 1 - \delta}
+	\]
+
+	\item Under event $\neg \mathcal{E}$, let us find $C_1$ such that for an arm $i \neq i^\star$, if $\Delta_i \geq C_1 U(t, \delta')$, then the arm $i$ will be removed from the active set.
+	
+	Let $i \neq i^\star$ and apply $\neg \mathcal{E}$ conditions on $i$ and $i^\star$.
+	\begin{align*}
+		&\begin{cases}
+			& | \wh{\mu}_{i^\star,t} - \mu^\star | \leq U(t,\delta')\\
+			& | \wh{\mu}_{i,t} - \mu_i | \leq U(t,\delta')\\
+		\end{cases}\\
+		&\begin{cases}
+			& -U(t,\delta') + \mu^\star \leq \wh{\mu}_{i^\star,t} \leq \mu^\star + U(t,\delta')\\
+			& -U(t,\delta') - \mu_i \leq -\wh{\mu}_{i,t} \leq -\mu_i + U(t,\delta')\\
+		\end{cases}\\
+	\end{align*}
+	\[
+		\neg \mathcal{E} \implies \Delta_i - 2U(t,\delta') \leq \wh{\mu}_{i^\star,t} - \wh{\mu}_{i,t} \leq \Delta_i + 2U(t,\delta')
+	\]
+	According to the algorithm (using $\delta'$ and not $\delta$ in the pseudo-code), if $\wh{\mu}_{i^\star,t} - \wh{\mu}_{i,t} \geq 2U(t,\delta')$, the arm $i$ will be removed from the active set.
+	
+	Therefore, if $\Delta_i - 2U(t,\delta') \geq 2U(t,\delta') \iff \Delta_i \geq 4U(t,\delta')$, the arm $i$ will be removed for sure from the active set, under $\neg \mathcal{E}$ conditions.
+	
+	Under event $\neg \mathcal{E}$, an arm $i \neq i^\star$ will be removed from the active set when $\boxed{\Delta_i \geq C_1 U(t, \delta')\; \text{with}\; C_1=4}$.
+	
+	With our definition of $U(t, \delta')$,
+	\[
+		\Delta_i \geq 4 U(t, \delta') \iff \Delta_i^2 \geq \frac{8}{t} \left( 2\log t + \log \frac{\pi^2}{3\delta} \right)
+	\]
+	By minimizing $\log t$ by $0$ (since $t \geq 1$), for every arm $i \neq i^\star$,
+	\[
+		\boxed{t \geq \frac{8\log \frac{\pi^2}{3\delta}}{\Delta_i^2}} \implies \Delta_i \geq 4 U(t, \delta') \implies \text{arm $i$ will be removed}
+	\]
+	
+	\item Let us compute a lower bound on the sample complexity for identifying the optimal arm with probability $1-\delta$.
+	
+	\[
+		\left( \forall i \neq i^\star,\; t \geq \frac{8\log \frac{\pi^2}{3\delta}}{\Delta_i^2} \right) \iff t \geq \frac{8\log \frac{\pi^2}{3\delta}}{\Delta_{i^\star}^2}
+	\]
+	With $\Delta_{i^\star} = \min_{i \neq i^\star} \Delta_i$.
+	\[
+		\boxed{\tau_\delta \geq \frac{8\log \frac{\pi^2}{3\delta}}{\Delta_{i^\star}^2}} \quad \text{with probability $1-\delta$.}
+	\]
+	
+\end{itemize}
+
+\section{Bernoulli Bandits}
+\label{sec:bernoulli}
+
+UCB and KL-UCB algorithms for Bernoulli Bandits have been implemented in Python, using NumPy and Matplotlib libraries. Expected regret of both algorithms are plotted in figure \ref{fig:regret} in the case of $k=2$ Bernoulli arms of means $\mu_1 \in \{0.1,0.5,0.9\}$ and $\mu_2 = 0.5 + \Delta$ with $\Delta \in [-0.5,0.5]$.
+
+First, one must observe that both algorithms always have a regret of $0$ when $\mu_1 = \mu_2$ (corresponding to $\Delta = 0$ in (a), $\Delta = -0.4$ in (b) and $\Delta = 0.4$ in (c)). Indeed this is explained by both arms having the same expected value and thus they are equally good in average. This means that whatever choice one makes, there is no regret from it.
+
+Then, both algorithms perform the worst when $\mu_1 \approx \mu_2$ but $\mu_1 \neq \mu_2$. This is straightforward to understand since when their expected values are very close to each other, it is harder or at least it takes longer to distinguish them. Therefore, one makes many more errors in choosing the wrong arm, increasing the regret.
+
+Finally, one can see in figure \ref{fig:regret} that the KL-UCB algorithm performs better than the UCB one. Although for $\mu_1 = 0.5$, KL-UCB and UCB tend to have rather similar performances when $\mu_2$ remains close to $\mu_1$, KL-UCB performs significantly better when $\mu_1 \in \{0.1,0.9\}$. The Kullback-Leibler divergence is indeed better at distinguishing between two Bernoulli distributions that would have their means close to 0 or close to 1. This is why KL-UCB performs better than UCB in figure \ref{fig:regret} (b) and (c) when $\mu_1 \approx \mu_2$ whereas it performs closely to UCB in (a) since the KL divergence is smaller when both means are around $0.5$.
+
+\begin{figure}[H]
+	\centering
+	\begin{subfigure}[h]{\textwidth}
+		\begin{center}
+			\input{plots/regrets_0.5.pgf}
+		\end{center}
+		\caption{$\mu_1 = 0.5$}
+	\end{subfigure}
+	\bigskip
+	\begin{subfigure}[h]{0.49\textwidth}
+		\begin{center}
+			\input{plots/regrets_0.1.pgf}
+		\end{center}
+		\caption{$\mu_1 = 0.1$}
+	\end{subfigure}
+	\hfill
+	\begin{subfigure}[h]{0.49\textwidth}
+		\begin{center}
+			\input{plots/regrets_0.9.pgf}
+		\end{center}
+		\caption{$\mu_1 = 0.9$}
+	\end{subfigure}
+	\caption{Expected regret after $n=10000$ steps for Bernoulli bandits with $k=2$ arms and means $\mu_1 = 0.5$ in (a), $0.1$ in (b) and $0.9$ in (c), and $\mu_2 = 0.5 + \Delta$ with $\Delta \in [-0.5,0.5]$. The plots were averaged over 50 runs for each $\Delta$.}
+	\label{fig:regret}
+\end{figure}
+
+\section{Regret Minimization in RL}
+
+We consider a finite-horizon MDP $M^\star = (S, A, p_h, r_h)$ with stage-dependent transitions and rewards.
+
+\begin{itemize}
+	\item We define the event $\mathcal{E} = \{\forall k, M^\star \in \mathcal{M}_k\}$ and $\mathcal{M}_k = \{ M = (S,A, p_{h,k}, r_{h,k}) ~:~ r_{h,k}(s,a) \in \mathcal{B}^r_{h,k}(s,a), p_{h,k}(\cdot|s,a) \in \mathcal{B}^p_{h,k}(s,a)  \}$. Let us define confidence intervals $\beta_{hk}^r(s,a)$ and $\beta_{hk}^p(s,a)$ as a function of $\delta$ such that $\mathbb{P}(\neg\mathcal{E}) \leq \delta/2$. 
+	
+	Let us choose:
+	\[
+		\boxed{\beta_{hk}^r(s,a) = \sqrt{\frac{\log \left(\frac{8HSAK}{\delta}\right)}{2N_{h,k}(s,a)}}}
+		\quad \text{and} \quad
+		\boxed{\beta_{hk}^p(s,a) = \sqrt{\frac{2\log \left(\frac{4HSAK\left(2^S-2\right)}{\delta}\right)}{N_{h,k}(s,a)}}}		
+	\]
+	\begin{align*}
+		\mathbb{P}(\neg\mathcal{E}) &= \mathbb{P}\left(\bigcup_{k=1}^K\left\{M^\star \notin \mathcal{M}_k\right\}\right) \\
+		&= \mathbb{P}\left(\bigcup_{k=1}^K \bigcup_{h=1}^H \bigcup_{s=1}^S \bigcup_{a=1}^A \left\{|\wh{r}_{hk}(s,a) - r_h(s,a)| \geq \beta_{hk}^r(s,a) \right\} \cup \left\{\|\wh{p}_{hk}(\cdot|s,a) - p_{h}(\cdot|s,a)\|_1\geq \beta_{hk}^p(s,a) \right\}\right) \\
+		&\leq \sum_{k=1}^K \sum_{h=1}^H \sum_{s=1}^S \sum_{a=1}^A \mathbb{P}\left\{|\wh{r}_{hk}(s,a) - r_h(s,a)| \geq \beta_{hk}^r(s,a) \right\} + \mathbb{P}\left\{\|\wh{p}_{hk}(\cdot|s,a) - p_{h}(\cdot|s,a)\|_1\geq \beta_{hk}^p(s,a) \right\} \\
+		&\leq \sum_{k=1}^K \sum_{h=1}^H \sum_{s=1}^S \sum_{a=1}^A \left[ 2\exp\left(-2N_{h,k}(s,a)\beta_{hk}^r(s,a)^2\right) + (2^S - 2) \exp\left(- \frac{N_{h,k}(s,a) \beta_{hk}^p(s,a)^2}{2} \right) \right] \\
+		&= \sum_{k=1}^K \sum_{h=1}^H \sum_{s=1}^S \sum_{a=1}^A \left[ \frac{\delta}{4HSAK} + \frac{\delta}{4HSAK} \right] \\
+		&= \frac{\delta}{2}
+	\end{align*}
+	Therefore, $\boxed{\mathbb{P}(\neg\mathcal{E}) \leq \frac{\delta}{2}}$.
+	
+	
+	\item Let us be under the event $\mathcal{E}$ and let $b_{h,k}(s,a)$ be a bonus to define.
+	\[
+		Q_{h,k}(s,a) = \wh{r}_{h,k}(s,a) + b_{h,k}(s,a) + \sum_{s'} \wh{p}_{h,k}(s'|s,a) V_{h+1,k}(s')
+	\]
+	Let us prove by induction that $\forall h,s,a,k,\; Q_{h,k}(s,a) \geq Q^\star_h(s,a)$
+	
+	\subitem \underline{Induction step}
+	
+	Let $h \in [1,H-1]$ and let us assume the following: $\quad \forall s,a,k,\; Q_{h+1,k}(s,a)\geq Q^\star_{h+1}(s,a)\quad$ (inductive assumption).
+
+	Let us show that: $\quad \forall s,a,k,\; Q_{h,k}(s,a) \geq Q^\star_{h}(s,a)$.
+	\begin{align*}
+	Q_{h,k}(s,a) - Q^\star_h(s,a)
+	&= \wh r_{h,k}(s,a)+b_{h,k}(s,a) + \sum_{s'} \wh{p}_{h,k}(s'|s,a)V_{h+1,k}(s') - \left(r_h(s,a)+\sum_{s'} p_h(s'|s,a)V^\star_{h+1}(s') \right) \\
+	&= \sum_{s'}\Big( \wh{p}_{h,k}(s'|s,a)\min{\{H,\max_{a'} Q_{h+1,k}(s',a')\}} - p_h(s'|s,a)\max_{a'} Q^\star_{h+1}(s',a') \Big) \\ 
+	&\qquad + \wh r_{h,k}(s,a) + b_{h,k}(s,a) - r_h(s,a) \\
+	&\geq \sum_{s'}\Big( \wh{p}_{h,k}(s'|s,a)\min{\{H,\max_{a'} Q_{h+1,k}(s',a')\}} - p_h(s'|s,a)\min{\{H,\max_{a'} Q_{h+1,k}(s',a')\}} \Big) \\ 
+	&\qquad + \wh r_{h,k}(s,a) + b_{h,k}(s,a) - r_h(s,a) \\
+	&= \sum_{s'} \min{\{H,\max_{a'} Q_{h+1,k}(s',a')\}} \left( \wh{p}_{h,k}(s'|s,a) -  p_h(s'|s,a)\right) \\
+	&\qquad + \wh r_{h,k}(s,a)+b_{h,k}(s,a) - r_h(s,a) \\
+	&\geq - \sum_{s'} \min{\{H,\max_{a'} Q_{h+1,k}(s',a')\}} \left| \wh{p}_{h,k}(s'|s,a) -  p_h(s'|s,a)\right| \\
+	&\qquad + \wh r_{h,k}(s,a)+b_{h,k}(s,a) - r_h(s,a) \\
+	&\geq - H\sum_{s'} \left| \wh{p}_{h,k}(s'|s,a) -  p_h(s'|s,a)\right| + \wh r_{h,k}(s,a)+b_{h,k}(s,a) - r_h(s,a) \\
+	&= - H \left \| \wh{p}_{h,k}(s'|s,a) -  p_h(s'|s,a) \right \|_1 + \wh r_{h,k}(s,a)+b_{h,k}(s,a) - r_h(s,a) \\
+	&\geq - H\beta^p_{h,k}(s,a) + b_{h,k}(s,a) - \beta^r_{h,k}(s,a) + \underbrace{\wh r_{h,k}(s,a) + \beta^r_{h,k}(s,a) - r_h(s,a)}_{\geq 0} \\
+	&\geq b_{h,k}(s,a) - \beta^r_{h,k}(s,a) - H\beta^p_{h,k}(s,a) \\
+	\end{align*}
+	
+	Indeed, the induction step works if $b_{h,k}(s,a)$ is chosen such that
+	\begin{equation*}
+		b_{h,k}(s,a) \geq  \beta^r_{h,k}(s,a) + H\beta^p_{h,k}(s,a)
+	\end{equation*}
+	Let us define $b_{h,k}(s,a)$ to ensure $Q_{h,k}$ is optimistic.
+	\begin{equation*}
+		\boxed{b_{h,k}(s,a) = \beta^r_{h,k}(s,a) + H \beta^p_{h,k}(s,a)}
+	\end{equation*}
+	With this choice of $b_{h,k}(s,a)$,
+	\[
+		Q_{h,k}(s,a) - Q^\star_h(s,a) \geq 0
+	\]
+	The induction step is now proved.
+	
+	
+	\subitem \underline{Base case}
+	
+	Since we are under the event $\mathcal{E}$, we have:
+	\begin{equation*}
+		\wh r_{H,k}(s,a)+ b_{Hk}(s,a) \geq \wh r_{H,k}(s,a)+\beta^r_{Hk}(s,a) \geq r_{H}(s,a).
+	\end{equation*}
+	Then, $\forall s',\; V_{H+1, k}(s') = V^\star_{H+1}(s') = 0$. Therefore, $\forall s,a,k, \; Q_{H,k}(s,a) - Q^\star_H(s,a)$. The base case is proven.
+	
+	Combining the base case and the inductive step gives us:
+	\[
+	\boxed{\forall h,s,a,k,\; Q_{h,k}(s,a) \geq Q^\star_h(s,a)}
+	\]
+	
+	
+	\item The aim in this question is to prove the following:
+	\begin{equation}
+	\label{eq:1}
+	\delta_{1,k}(s_{1,k}) \leq \sum_{h=1}^H Q_{h,k}(s_{h,k},a_{h,k}) - r(s_{h,k},a_{h,k}) - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[V_{h+1,k}(Y)]) + m_{h,k}
+	\end{equation}
+	Where $\delta_{h,k}(s) = V_{h,k}(s) - V_h^{\pi_k}(s)$ and $m_{h,k} = \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[\delta_{h+1,k}(Y)] - \delta_{h+1,k}(s_{h+1,k})$.
+	
+	\subitem 1. Let us show that $V^{\pi_{k}}_h(s_{h,k}) = r(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1,k}(s')] - \delta_{h+1,k}(s_{h+1,k}) - m_{h,k}$.
+	\begin{align*}
+		\quad r&(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1,k}(s')] - \delta_{h+1,k}(s_{h+1,k}) - m_{h,k} \\
+		&= r(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1,k}(s')] - \delta_{h+1,k}(s_{h+1,k}) - \left( \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[\delta_{h+1,k}(Y)] - \delta_{h+1,k}(s_{h+1,k}) \right) \\
+		&= r(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1,k}(s')] - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[\delta_{h+1,k}(Y)] \\
+		&= r(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1,k}(s')] - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[V_{h+1,k}(Y) - V_{h+1}^{\pi_k}(Y)] \\
+		&= r(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1,k}(s')] + \mathbb{E}_{p}[V_{h+1}^{\pi_k}(Y)] - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[V_{h+1,k}(Y)] \\
+		&= r(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1}^{\pi_k}(Y)] \\
+		&= V^{\pi_{k}}_h(s_{h,k}) \qquad \text{(Bellman equation)}
+	\end{align*}
+	\qquad \qquad Therefore, $\boxed{V^{\pi_{k}}_h(s_{h,k}) = r(s_{h,k},a_{h,k}) + \mathbb{E}_{p}[V_{h+1,k}(s')] - \delta_{h+1,k}(s_{h+1,k}) - m_{h,k}}$.
+		
+	\subitem 2. Let us prove that $V_{h,k}(s_{h,k}) \leq Q_{h,k}(s_{h,k},a_{h,k})$.
+	\begin{align*}
+		V_{h,k}(s_{h,k}) &= \min \{H, \max_{a'}Q_{h,k}(s_{h,k},a')\} \\
+		& \leq \max_{a'}Q_{h,k}(s_{h,k},a') \\
+		& \leq Q_{h,k}(s_{h,k},a_{h,k})		
+	\end{align*}
+	\qquad \qquad Therefore, $\boxed{V_{h,k}(s_{h,k}) \leq Q_{h,k}(s_{h,k},a_{h,k})}$.
+	
+	\subitem 3. Let us prove equation~\ref{eq:1}.
+	\begin{align*}
+		\delta_{1,k}(s_{1,k}) &= V_{1,k}(s_{1,k}) - V_1^{\pi_k}(s_{1,k}) \\
+		&\leq Q_{1,k}(s_{1,k},a_{1,k}) - \left( r(s_{1,k},a_{1,k}) + \mathbb{E}_{p}[V_{2,k}(s')] - \delta_{2,k}(s_{2,k}) - m_{1,k}\right) \\
+		&= \delta_{2,k}(s_{2,k}) + \big[Q_{1,k}(s_{1,k},a_{1,k}) - r(s_{1,k},a_{1,k}) - \mathbb{E}_{p}[V_{2,k}(s')] - m_{1,k}\big] \\
+		&= V_{2,k}(s_{2,k}) - V_2^{\pi_k}(s_{2,k}) + \big[Q_{1,k}(s_{1,k},a_{1,k}) - r(s_{1,k},a_{1,k}) - \mathbb{E}_{p}[V_{2,k}(s')] - m_{1,k}\big] \\
+		&\leq \dots \\
+		&\leq \sum_{h=1}^{H} Q_{h,k}(s_{h,k},a_{h,k}) - r(s_{h,k},a_{h,k}) - \mathbb{E}_{p}[V_{h+1,k}(s')] - m_{h,k}
+	\end{align*}
+	\qquad \qquad Therefore, $\boxed{\delta_{1,k}(s_{1,k}) \leq \sum_{h=1}^H Q_{h,k}(s_{h,k},a_{h,k}) - r(s_{h,k},a_{h,k}) - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[V_{h+1,k}(Y)]) + m_{h,k}}$.
+	
+	
+	\item Let us show that with probability $1-\delta$, $R(T) \leq \sum_{k,h} b_{h,k}(s_{h,k},a_{h,k}) + 2H\sqrt{KH \log(2/\delta)}$
+	\begin{align*}
+		R(T) &= \sum_{k=1}^{K} V_1^\star(s_{1,k}) - V_1^{\pi_k}(s_{1,k}) \\
+		&= \sum_{k=1}^{K} V_1^{\pi_k^\star}(s_{1,k}) - V_{1,k}(s_{1,k}) + \sum_{k=1}^{K} V_{1,k}(s_{1,k}) - V_1^{\pi_k}(s_{1,k}) \\
+		&= \sum_{k=1}^{K} -\delta_{1,k}^\star(s_{1,k}) + \delta_{1,k}(s_{1,k}) \\
+		&\leq \sum_{k=1}^{K} \delta_{1,k}(s_{1,k}) \quad \left(\text{Since}\; V \geq V^\star \geq V^{\pi_k} \right) \\
+		&\leq \sum_{k=1}^{K} \sum_{h=1}^H Q_{h,k}(s_{h,k},a_{h,k}) - r(s_{h,k},a_{h,k}) - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[V_{h+1,k}(Y)]) + m_{h,k} \\
+		&= \sum_{k=1}^{K} \sum_{h=1}^H m_{h,k} + \sum_{k=1}^{K} \sum_{h=1}^H Q_{h,k}(s_{h,k},a_{h,k}) - r(s_{h,k},a_{h,k}) - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[V_{h+1,k}(Y)]) \\
+		&\leq \sum_{k=1}^{K} \sum_{h=1}^H m_{h,k} + \sum_{k=1}^{K} \sum_{h=1}^H Q_{h,k}(s_{h,k},a_{h,k}) - r(s_{h,k},a_{h,k}) - \mathbb{E}_{Y\sim p(\cdot|s_{h,k},a_{h,k})}[V^\star_{h+1}(Y)]) \\
+		&= \sum_{k=1}^{K} \sum_{h=1}^H m_{h,k} + \sum_{k=1}^{K} \sum_{h=1}^H Q_{h,k}(s_{h,k},a_{h,k}) - Q^\star_{h,k}(s_{h,k},a_{h,k}) \\
+	\end{align*}
+	The first sum is bounded by Azuma with probability $1 - \frac{\delta}{2}$ whereas the second one is bounded by the bonuses again with probability $1 - \frac{\delta}{2}$. Therefore, with probability $1 - \delta$, we have:
+	\begin{equation*}
+		\boxed{R(T) \leq \sum_{k=1}^{K} \sum_{h=1}^H b_{h,k}(s_{h,k},a_{h,k}) + 2H\sqrt{KH \log(2/\delta)}}
+	\end{equation*}
+	
+	
+	\item Finally, let us show that $R(T) \lesssim H^2S\sqrt{AK}$.
+	\begin{align*}
+		\sum_{h,k} \frac{1}{\sqrt{N_{h,k}(s_{h,k},a_{h,k})}} &= \sum_{h=1}^H\sum_{s,a} \sum_{i=1}^{N_{h,K}(s,a)} \frac{1}{\sqrt{i}} \\
+		&\leq 2\sum_{h=1}^H\sum_{s,a} \sqrt{N_{h,K}(s,a)} \\
+		&\leq 2\sqrt{SAH}\sqrt{\sum_{h=1}^H\sum_{s,a} N_{h,K}(s,a)} \qquad \left(\text{Jensen}\right)\\
+		&\leq 2\sqrt{SAH}\sqrt{\sum_{h=1}^H K} \qquad \left(\forall h, \; \sum_{s,a} N_{h,K}(s,a) \leq K \right) \\
+		&\leq 2H\sqrt{SAK}
+	\end{align*}
+	Therefore, 
+	\[
+	\boxed{\sum_{k=1}^{K} \sum_{h=1}^H \frac{1}{\sqrt{N_{h,k}(s_{h,k},a_{h,k})}} \leq 2H\sqrt{SAK}}
+	\]
+	Let us conclude on the regret.
+	\begin{align*}
+		R(T) &\leq \sum_{k=1}^{K} \sum_{h=1}^H b_{h,k}(s_{h,k},a_{h,k}) + 2H\sqrt{KH \log(2/\delta)} \\
+		&= \left( \sqrt{\frac{\log \left(\frac{8HSAK}{\delta}\right)}{2}} + H\sqrt{2\log \left(\frac{4HSAK\left(2^S-2\right)}{\delta}\right)} \right) \sum_{k=1}^{K} \sum_{h=1}^H \frac{1}{\sqrt{N_{h,k}(s_{h,k},a_{h,k})}} + 2H\sqrt{KH \log(2/\delta)} \\
+		&\leq \left( \sqrt{\frac{\log \left(\frac{8HSAK}{\delta}\right)}{2}} + H\sqrt{2\log \left(\frac{4HSAK\left(2^S-2\right)}{\delta}\right)} \right) 2H\sqrt{SAK}  + 2H\sqrt{KH \log(2/\delta)}\\
+		&\leq f\left(H,S,A,K\right) H\sqrt{SAK} + cH\sqrt{KH} \\
+	\end{align*}
+	Where $c$ is a constant (depends on $\delta$) and $f\left(H,S,A,K\right) \lesssim H\sqrt{S}$.
+	Therefore, we find the regret upper bound:
+	\[
+	\boxed{R(T) \lesssim H^2S\sqrt{AK}}
+	\]
+\end{itemize}
+
+\end{document}
